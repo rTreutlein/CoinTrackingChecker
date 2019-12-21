@@ -1,1 +1,1 @@
-stack exec consistencyChecker-exe
+stack build && stack exec consistencyChecker-exe

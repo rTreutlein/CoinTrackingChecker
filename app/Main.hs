@@ -16,8 +16,88 @@ main = do
     csvData <- BL.readFile "data.csv"
     case decodeByName csvData of
         Left err -> putStrLn err
-        Right (_, v) -> print $ foldl check M.empty $ sort $ toList v
+        Right (_, v) -> do
+            let lst = sort $ toList v
+            fixed <- checkConsistency lst
+            print fixed
 
+
+checkConsistency :: [Tx] -> IO [Tx]
+checkConsistency (tx@Tx{..}:txs) = case typ of
+                                   "Mining" -> pure.(tx:) =<< checkConsistency txs
+                                   "Einnahme" -> pure.(tx:) =<< checkConsistency txs
+                                   "Ausgabe" -> pure.(tx:) =<< checkConsistency txs
+                                   "Trade" -> pure.(tx:) =<< checkConsistency txs
+                                   "Einzahlung" -> do
+                                       print tx
+                                       (res,ntxs) <- findMatches [tx] [] txs
+                                       remainder <- checkConsistency txs
+                                       pure (res ++ remainder)
+                                   "Auszahlung" -> do
+                                       print tx
+                                       (res,ntxs) <- findMatches [tx] [] txs
+                                       remainder <- checkConsistency txs
+                                       pure (res ++ remainder)
+
+findMatches :: [Tx] -> [Tx] -> [Tx] -> IO ([Tx],[Tx])
+findMatches found other (tx:txs) = do
+    let (ftx:ftxs) = found
+    case date tx == date ftx of
+        True -> findMatches (tx:found) other txs
+        _ -> do
+            print tx
+            putStrLn "j to Accept, s to Skip, f to finish"
+            answer <- getLine
+            case answer of
+                "j" -> findMatches (tx:found) other txs
+                "s" -> findMatches found (tx:other) txs
+                "f" -> do
+                    checked <- fixMatches found
+                    pure (checked, other++txs)
+                _   -> error "Aborted"
+
+fixMatches :: [Tx] -> IO [Tx]
+fixMatches txs = do
+    let (inp, out, fee, ctxs) = foldl calcFee (0,0,0,[]) txs
+        diff = inp - (out + fee)
+        tx = head ctxs
+        ntxs = feeTx fee tx : ctxs
+    case diff of
+        0 -> pure ntxs
+        _ -> do
+            putStrLn $ "Diff is: " ++ show diff
+            putStrLn $ "Fee is: " ++ show fee
+            putStrLn $ "a To use Diff as Fee, f {fee} to add custom"
+            input <- getLine
+            case words input of
+                ("a":[])      -> pure (feeTx diff tx : txs)
+                ("f":sfee:[]) -> pure (feeTx (read sfee) tx:txs)
+                _             -> error "Aborted"
+
+
+feeTx :: Float -> Tx -> Tx
+feeTx f tx = Tx { typ    = "Ausgabe"
+                , tin    = 0
+                , inCur  = ""
+                , tout   = 0
+                , outCur = ""
+                , fee    = f
+                , feeCur = cur
+                , sid    = sid tx ++ "-_-" ++ show f
+                , date   = date tx
+                , idx    = idx tx
+                }
+    where cur = case typ tx of
+                    "Einzahlung" -> inCur tx
+                    "Auszahlung" -> outCur tx
+
+calcFee :: (Float,Float,Float,[Tx]) -> Tx -> (Float,Float,Float,[Tx])
+calcFee (inp,out,tfee,txs) tx@Tx{..} = case typ of
+    "Einzahlung" -> (inp+tin, out     , tfee + fee, (setFeeNull tx):txs)
+    "Auszahlung" -> (inp    , out+tout, tfee + fee, (setFeeNull tx):txs)
+
+setFeeNull :: Tx -> Tx
+setFeeNull tx = tx { fee = 0, feeCur = ""}
 
 fm = flip (-)
 
@@ -53,4 +133,5 @@ checkA tx m = if any (< 0) $ M.filterWithKey filterf m
 
 filterf ('A':_) _ = True
 filterf _ _ = False
+
 
