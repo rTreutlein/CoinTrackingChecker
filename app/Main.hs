@@ -11,13 +11,16 @@ import Data.List
 import qualified Data.Vector as V
 import qualified Data.Map as M
 
+import Debug.Trace
+
 main :: IO ()
 main = do
-    csvData <- BL.readFile "data.csv"
+    csvData <- BL.readFile "ndata.csv"
     case decodeByName csvData of
         Left err -> putStrLn err
         Right (_, v) -> do
             let lst = sort $ toList v
+            writeFile "inputs.txt" ""
             fixed <- checkConsistency lst
             print fixed
 
@@ -25,35 +28,43 @@ main = do
 checkConsistency :: [Tx] -> IO [Tx]
 checkConsistency (tx@Tx{..}:txs) = case typ of
                                    "Mining" -> pure.(tx:) =<< checkConsistency txs
+                                   "Masternode" -> pure.(tx:) =<< checkConsistency txs
                                    "Einnahme" -> pure.(tx:) =<< checkConsistency txs
                                    "Ausgabe" -> pure.(tx:) =<< checkConsistency txs
                                    "Trade" -> pure.(tx:) =<< checkConsistency txs
+                                   "Dividenden Einnahme" -> pure.(tx:) =<< checkConsistency txs
+                                   "Sonstige Gebühr" -> pure.(tx:) =<< checkConsistency txs
                                    "Einzahlung" -> do
                                        print tx
                                        (res,ntxs) <- findMatches [tx] [] txs
-                                       remainder <- checkConsistency txs
+                                       remainder <- checkConsistency ntxs
                                        pure (res ++ remainder)
                                    "Auszahlung" -> do
                                        print tx
                                        (res,ntxs) <- findMatches [tx] [] txs
-                                       remainder <- checkConsistency txs
+                                       remainder <- checkConsistency ntxs
                                        pure (res ++ remainder)
 
 findMatches :: [Tx] -> [Tx] -> [Tx] -> IO ([Tx],[Tx])
 findMatches found other (tx:txs) = do
     let (ftx:ftxs) = found
-    case date tx == date ftx of
-        True -> findMatches (tx:found) other txs
-        _ -> do
+    case date tx == date ftx || (sid tx == sid ftx && sid tx /= "")  of
+        True -> do
+            print tx
+            findMatches (tx:found) other txs
+        False -> do
+            putStrLn "?"
             print tx
             putStrLn "j to Accept, s to Skip, f to finish"
             answer <- getLine
+            appendFile "inputs.txt" (answer ++ "\n")
             case answer of
                 "j" -> findMatches (tx:found) other txs
                 "s" -> findMatches found (tx:other) txs
                 "f" -> do
+                    print $ length found
                     checked <- fixMatches found
-                    pure (checked, other++txs)
+                    pure (checked, tx:other++txs)
                 _   -> error "Aborted"
 
 fixMatches :: [Tx] -> IO [Tx]
@@ -95,6 +106,8 @@ calcFee :: (Float,Float,Float,[Tx]) -> Tx -> (Float,Float,Float,[Tx])
 calcFee (inp,out,tfee,txs) tx@Tx{..} = case typ of
     "Einzahlung" -> (inp+tin, out     , tfee + fee, (setFeeNull tx):txs)
     "Auszahlung" -> (inp    , out+tout, tfee + fee, (setFeeNull tx):txs)
+    "Sonstige Gebühr" -> (inp + tout, out, tfee + tout, txs)
+    other -> trace other (inp,out,tfee,txs)
 
 setFeeNull :: Tx -> Tx
 setFeeNull tx = tx { fee = 0, feeCur = ""}

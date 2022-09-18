@@ -53,7 +53,10 @@ instance Show Tx where
               "Trade" ->      s_out ++ ">>>" ++ s_in  ++ rest
               "Einnahme" ->   s_spc ++ ">+>" ++ s_in  ++ rest
               "Mining" ->     s_spc ++ ">+>" ++ s_in  ++ rest
+              "Masternode" -> s_spc ++ ">+>" ++ s_in  ++ rest
               "Ausgabe" ->    s_out ++ ">->" ++ s_spc ++ rest
+              "Sonstige Gebühr" ->     s_out ++ ">->" ++ s_spc ++ rest
+              "Dividenden Einnahme" -> s_spc ++ ">+>" ++ s_in  ++ rest
         where s_in  = printf "%.2f " tin ++ padL 4 inCur
               s_out = printf "%.2f " tout ++ padL 4 outCur
               s_spc = "         "

@@ -1,1 +1,1 @@
-stack build && stack exec consistencyChecker-exe
+stack build && cat inputs.txt - | stack exec consistencyChecker-exe
