@@ -19,14 +19,15 @@ main = do
     csvData <- BL.readFile "ndata.csv"
     case decodeByName csvData of
         Left err -> putStrLn err
-        Right (_, v) -> do
-            let lst = sort $ toList v
+        Right (header, values) -> do
+            let lst = sort $ toList values
             writeFile "inputs.txt" ""
             fixed <- checkConsistency lst
-            print fixed
+            BL.writeFile "res.csv" $ encodeByName header fixed
 
 
 checkConsistency :: [Tx] -> IO [Tx]
+checkConsistency [] = pure []
 checkConsistency (tx@Tx{..}:txs) = case typ of
                                    "Mining" -> pure.(tx:) =<< checkConsistency txs
                                    "Masternode" -> pure.(tx:) =<< checkConsistency txs
@@ -102,6 +103,7 @@ feeTx f tx = Tx { typ    = "Ausgabe"
                 , fee    = f
                 , feeCur = cur
                 , sid    = sid tx ++ "-_-" ++ show f
+                , comment = comment tx
                 , date   = date tx
                 , idx    = idx tx
                 }

@@ -5,6 +5,7 @@ module Lib where
 import Data.Csv
 import Data.Time
 import Data.Scientific
+import Data.ByteString.Char8 (pack)
 import Debug.Trace
 import Text.Printf
 
@@ -17,6 +18,7 @@ data Tx = Tx
      , fee    :: !Scientific
      , feeCur :: !String
      , sid    :: !String
+     , comment:: !String
      , date   :: !UTCTime
      , idx    :: !Int
      }
@@ -43,8 +45,27 @@ instance FromNamedRecord Tx where
                             <*> r .: "Gebuhr"
                             <*> r .: "Gcur"
                             <*> r .: "ID"
+                            <*> r .: "Kommentar"
                             <*> r .: "Datum"
                             <*> r .: "Index"
+
+instance ToField UTCTime where
+    toField = pack . show
+
+instance ToNamedRecord Tx where
+    toNamedRecord tx@Tx{..} = namedRecord ["Typ" .= typ
+                                          ,"Kauf" .= tin
+                                          ,"Kcur" .= inCur
+                                          ,"Verkauf" .= tout
+                                          ,"Vcur" .= outCur
+                                          ,"Gebuhr" .= fee
+                                          ,"Gcur" .= feeCur
+                                          ,"ID" .= sid
+                                          ,"Kommentar" .= comment
+                                          ,"Datum" .= date
+                                          ,"Index" .= idx
+                                          ]
+
 instance Show Tx where
     show tx@Tx{..} =
           case typ of
@@ -52,6 +73,7 @@ instance Show Tx where
               "Auszahlung" -> s_out ++ ">>>" ++ s_spc ++ rest
               "Trade" ->      s_out ++ ">>>" ++ s_in  ++ rest
               "Einnahme" ->   s_spc ++ ">+>" ++ s_in  ++ rest
+              "Airdrop" ->    s_spc ++ ">+>" ++ s_in  ++ rest
               "Mining" ->     s_spc ++ ">+>" ++ s_in  ++ rest
               "Masternode" -> s_spc ++ ">+>" ++ s_in  ++ rest
               "Ausgabe" ->    s_out ++ ">->" ++ s_spc ++ rest
