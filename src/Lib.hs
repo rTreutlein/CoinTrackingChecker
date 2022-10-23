@@ -4,16 +4,17 @@ module Lib where
 
 import Data.Csv
 import Data.Time
+import Data.Scientific
 import Debug.Trace
 import Text.Printf
 
 data Tx = Tx
      { typ    :: !String
-     , tin    :: !Float
+     , tin    :: !Scientific
      , inCur  :: !String
-     , tout   :: !Float
+     , tout   :: !Scientific
      , outCur :: !String
-     , fee    :: !Float
+     , fee    :: !Scientific
      , feeCur :: !String
      , sid    :: !String
      , date   :: !UTCTime
@@ -32,7 +33,6 @@ instance FromField UTCTime where
     parseField = parseTimeM True defaultTimeLocale "%d.%m.%Y %H:%M"
                  . filter (/= '\"')
                  . show
-
 
 instance FromNamedRecord Tx where
     parseNamedRecord r = Tx <$> r .: "Typ"
@@ -57,8 +57,8 @@ instance Show Tx where
               "Ausgabe" ->    s_out ++ ">->" ++ s_spc ++ rest
               "Sonstige Gebühr" ->     s_out ++ ">->" ++ s_spc ++ rest
               "Dividenden Einnahme" -> s_spc ++ ">+>" ++ s_in  ++ rest
-        where s_in  = printf "%.2f " tin ++ padL 4 inCur
-              s_out = printf "%.2f " tout ++ padL 4 outCur
+        where s_in  = formatScientific Generic (Just 2) tin ++ padL 4 inCur
+              s_out = formatScientific Generic (Just 2) tout ++ padL 4 outCur
               s_spc = "         "
               rest = show date ++ " " ++ sid
 

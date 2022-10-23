@@ -26,6 +26,7 @@ dependencies:
 - containers
 - bytestring
 - time
+- scientific
 
 library:
   source-dirs: src

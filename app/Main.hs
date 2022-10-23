@@ -8,6 +8,7 @@ import Data.Foldable
 import qualified Data.ByteString.Lazy as BL
 import Data.Csv
 import Data.List
+import Data.Scientific
 import qualified Data.Vector as V
 import qualified Data.Map as M
 
@@ -30,6 +31,7 @@ checkConsistency (tx@Tx{..}:txs) = case typ of
                                    "Mining" -> pure.(tx:) =<< checkConsistency txs
                                    "Masternode" -> pure.(tx:) =<< checkConsistency txs
                                    "Einnahme" -> pure.(tx:) =<< checkConsistency txs
+                                   "Airdrop" -> pure.(tx:) =<< checkConsistency txs
                                    "Ausgabe" -> pure.(tx:) =<< checkConsistency txs
                                    "Trade" -> pure.(tx:) =<< checkConsistency txs
                                    "Dividenden Einnahme" -> pure.(tx:) =<< checkConsistency txs
@@ -44,11 +46,12 @@ checkConsistency (tx@Tx{..}:txs) = case typ of
                                        (res,ntxs) <- findMatches [tx] [] txs
                                        remainder <- checkConsistency ntxs
                                        pure (res ++ remainder)
+                                   _ -> do error $ "This " ++ typ ++ " is not yet supported"
 
 findMatches :: [Tx] -> [Tx] -> [Tx] -> IO ([Tx],[Tx])
 findMatches found other (tx:txs) = do
     let (ftx:ftxs) = found
-    case date tx == date ftx || (sid tx == sid ftx && sid tx /= "")  of
+    case (date tx == date ftx && (typ tx == "Einzahlung" || typ tx == "Auszahlung" || typ tx == "Sonstige Gebühr")) || (sid tx == sid ftx && sid tx /= "") of
         True -> do
             print tx
             findMatches (tx:found) other txs
@@ -70,23 +73,27 @@ findMatches found other (tx:txs) = do
 fixMatches :: [Tx] -> IO [Tx]
 fixMatches txs = do
     let (inp, out, fee, ctxs) = foldl calcFee (0,0,0,[]) txs
-        diff = inp - (out + fee)
+        diff = inp - out - fee
         tx = head ctxs
         ntxs = feeTx fee tx : ctxs
     case diff of
         0 -> pure ntxs
         _ -> do
-            putStrLn $ "Diff is: " ++ show diff
+            putStrLn $ "In is: " ++ show inp
+            putStrLn $ "Out is: " ++ show out
+            putStrLn $ "In-Out is: " ++ show (inp - out - fee)
             putStrLn $ "Fee is: " ++ show fee
+            putStrLn $ "Diff is: " ++ show diff
             putStrLn $ "a To use Diff as Fee, f {fee} to add custom"
             input <- getLine
+            appendFile "inputs.txt" (input ++ "\n")
             case words input of
                 ("a":[])      -> pure (feeTx diff tx : txs)
                 ("f":sfee:[]) -> pure (feeTx (read sfee) tx:txs)
                 _             -> error "Aborted"
 
 
-feeTx :: Float -> Tx -> Tx
+feeTx :: Scientific -> Tx -> Tx
 feeTx f tx = Tx { typ    = "Ausgabe"
                 , tin    = 0
                 , inCur  = ""
@@ -102,11 +109,11 @@ feeTx f tx = Tx { typ    = "Ausgabe"
                     "Einzahlung" -> inCur tx
                     "Auszahlung" -> outCur tx
 
-calcFee :: (Float,Float,Float,[Tx]) -> Tx -> (Float,Float,Float,[Tx])
+calcFee :: (Scientific,Scientific,Scientific,[Tx]) -> Tx -> (Scientific,Scientific,Scientific,[Tx])
 calcFee (inp,out,tfee,txs) tx@Tx{..} = case typ of
     "Einzahlung" -> (inp+tin, out     , tfee + fee, (setFeeNull tx):txs)
     "Auszahlung" -> (inp    , out+tout, tfee + fee, (setFeeNull tx):txs)
-    "Sonstige Gebühr" -> (inp + tout, out, tfee + tout, txs)
+    "Sonstige Gebühr" -> (inp , out, tfee + tout, txs)
     other -> trace other (inp,out,tfee,txs)
 
 setFeeNull :: Tx -> Tx
@@ -114,7 +121,7 @@ setFeeNull tx = tx { fee = 0, feeCur = ""}
 
 fm = flip (-)
 
-check :: M.Map String Float -> Tx -> M.Map String Float
+check :: M.Map String Scientific -> Tx -> M.Map String Scientific
 check m tx@Tx{..} = case typ of
                     "Mining" -> M.insertWith (+) inCur tin m
                     "Einnahme" -> M.insertWith (+) inCur tin m
@@ -139,7 +146,7 @@ check m tx@Tx{..} = case typ of
                     a -> error a
 
 
-checkA :: Tx -> M.Map String Float -> M.Map String Float
+checkA :: Tx -> M.Map String Scientific -> M.Map String Scientific
 checkA tx m = if any (< 0) $ M.filterWithKey filterf m
                  then error $ show tx ++ "\n" ++ show m
                  else m
